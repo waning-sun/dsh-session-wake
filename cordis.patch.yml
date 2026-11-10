@@ -1,0 +1,27 @@
+# dsh-session-wake 的 bundle patch：把「会话唤醒」这一行插进 profile 的插件名册。
+# package.json 里 dsh.bundle.patch 指的就是这个文件；缺了它、只把包名写进 profile 的
+# dsh.profile.bundles，插件管理器会报「这个包没有声明组合包，不能作为插件管理」。
+#
+# 装法：把包名登记到 ~/.dsh/profiles/<profile>/package.json 的 dsh.profile.bundles 即可，
+#       bundle patch 会自动应用。别再在 profile 的 cordis.patch.yml 里手插一遍——
+#       同一个 id 插两次会加载两份实例，两份共享 globalThis 的 state 会互相掐定时器。
+#
+# 这里的 config 只是「初始默认」。装完请在
+#   DSH → 设置 → 会话唤醒
+# 里改配置并保存 —— 那份（~/.dsh/dsh-session-wake.json）优先级更高，改完立刻生效，不用重启 DSH。
+- insert:
+    - id: session-wake
+      name: 'dsh-session-wake'
+      config:
+        # 总开关：关掉之后既不自动唤醒，也不注册工具
+        开: true
+        # 开机自动唤醒的会话：[{ 会话, 开, provider, model, 思考强度, 提示词 }]
+        自动唤醒: []
+        # 默认模型；空 = 跟 profile 的 agent-default-model
+        provider: ''
+        model: ''
+        思考强度: ''
+        # 启动后等多久再叫（毫秒），给宿主把服务起齐
+        启动延迟毫秒: 1500
+        # session_task 等答复的超时（秒）
+        唤醒超时秒: 300
