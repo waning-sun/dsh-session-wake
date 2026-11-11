@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-wake",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "让 DSH 会话之间互相叫醒：开机自动唤醒指定的一个或几个对话（每间可单独指定 provider / model / 思考强度）；同时给 AI 一个 session_task 工具，把一个对话里的事情丢给另一个对话去做，等它跑完再把结果取回来。不依赖 QQ、不绑定任何桥。",
   "main": "lib/index.js",

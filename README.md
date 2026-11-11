@@ -109,6 +109,16 @@ dsh plugin add dsh-session-wake
 - 取答复走 `ctx.sessionQuery.readSession(id)`：只收「投递前那号之后」的 `assistant/message` 事件里的 `text` 块 —— 所以拿回来的是**这一轮**的产出，不是整段历史。
 - 宿主服务偶尔比 `apply` 晚一步就绪：一律经 `取服务()` 兜住，没挂上就每秒补挂，最多 30 次。
 
+## 面板接口的准入（1.0.2 起）
+
+`/dsh-session-wake/*` 这几条是用 `webServer.register` 挂的，宿主对这类路由不做任何准入（只有 `/api` 网关和 `ctx.connection.fetch.register` 的精确路由会过 Connection 的 Host/Origin 围栏）。`/save` 又能改「自动唤醒列表 + 开机提示词」，所以每条入口自己过一遍：
+
+- 能拿到 `connection` 服务时，直接调 `connection.requestRejection(req)` —— 跟宿主自带插件同一套判断（Host/Origin 围栏 + 浏览器登录态），`401`/`403` 原样回给调用方。
+- 拿不到 `connection`（老宿主、`dsh-market` 的 apply 审计探针、服务还没补挂上）时，退回内置的等价围栏：Host 必须是回环地址或本机网卡地址、`sec-fetch-site` 不能是 `cross-site`、带 `Origin` 时必须与 `Host` 同权威。这条规则就是照着宿主的 `isTrustedApiRequest` / `isSameAuthorityOrigin` 写的——DNS 重绑定那类页面（Host 是攻击者域名）会被挡在门外。
+- `POST /save`、`POST /test` 还要求 `content-type: application/json`（否则 415）：表单式的简单请求带不了这个头，跨站页面也就写不进配置。
+
+面板自己本来就是同源请求（`fetch` 带 JSON 头、`GET` 不带 `Origin`），不受影响。
+
 ## 几个坑（改代码前先看）
 
 - `apply` **必须同步、且不返回任何值**：返回 Promise / 对象会被 cordis 判成 `TypeError: Invalid effect`，整个 entry 直接不激活。

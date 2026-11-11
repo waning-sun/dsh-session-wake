@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2 — 2026-11-11
+
+补上面板接口的准入围栏（awesome-dsh-plugin PR review 提的问题）。
+
+- **每条路由入口先过准入**：`/state`、`/sessions`、`/llm`、`/save`、`/test` 是 `webServer.register` 挂的，宿主对这类路由不做任何准入；现在统一先调 `connection.requestRejection(req)`（Host/Origin 围栏 + 浏览器登录态），拿不到 `connection` 服务时退回内置等价围栏（Host 必须是回环/本机网卡地址、`sec-fetch-site` 不能是 `cross-site`、`Origin` 必须与 `Host` 同权威），401/403 原样回。
+- **POST 强制 JSON**：`/save`、`/test` 要求 `content-type: application/json`，否则 415 —— 表单式简单请求带不了这个头，跨站页面（含 DNS 重绑定）写不进配置、也触发不了测试。
+- 面板自身是同源请求，行为不变。
+
+自检：`probe-apply-ctx` 新增 13 项围栏断言（回环放行 / 无 Host 拒 / 非本机 Host 拒 / cross-site 拒 / 跨源 Origin 拒 / 同源放行 / 表单 POST 415 / 跨站 POST 403）全过，其余三个脚本照旧全绿。
+
 ## 1.0.1 — 2026-11-08
 
 修「思考强度选不了」+ 重排「默认模型」卡片。

@@ -81,6 +81,107 @@ const mod = await import(pathToFileURL(join(根, 'lib/index.js')).href)
   await new Promise((r) => setTimeout(r, 60))
 }
 
+// ── ③ 准入围栏：跨站 / DNS 重绑定要挡，本机同源要放 ────────────────────────
+{
+  const 处理 = new Map()
+  const 清 = []
+  const ctx = {
+    logger: { info: () => {} },
+    tools: { register: () => {} },
+    webServer: { register: (opt) => (处理.set(opt.path, opt.handler), () => {}) },
+    agents: { get: () => undefined, resume: async () => ({ agent: { status: 'idle', whenIdle: async () => {}, followup() {} } }) },
+    sessionQuery: { listSessions: async () => [], readSession: async () => ({ events: [] }) },
+    sessions: { get: () => undefined, flush: async () => {} },
+    effect: (fn) => {
+      const f = fn()
+      if (typeof f === 'function') 清.push(f)
+    },
+  }
+  mod.apply(ctx, { 启动延迟毫秒: 60000, 自动唤醒: [] })
+
+  const 假res = () => {
+    const 记 = { 码: 0, 体: '' }
+    return {
+      记,
+      writeHead: (c) => {
+        记.码 = c
+      },
+      end: (b) => {
+        记.体 = String(b == null ? '' : b)
+      },
+      setHeader: () => {},
+      getHeader: () => undefined,
+      headersSent: false,
+    }
+  }
+  const 打 = async (子, { method = 'GET', headers = {}, body = '' } = {}) => {
+    const res = 假res()
+    const h = 处理.get(mod.ROUTE + 子)
+    if (typeof h !== 'function') return { 码: 0, 体: '没挂上' }
+    const req = {
+      method,
+      headers,
+      on: (ev, fn) => {
+        if (ev === 'data' && body) fn(Buffer.from(body))
+        if (ev === 'end') setImmediate(() => fn())
+      },
+    }
+    h(req, res)
+    await new Promise((r) => setTimeout(r, 30))
+    return res.记
+  }
+
+  // 纯函数级的围栏规则
+  说(mod.本地围栏({ headers: { host: '127.0.0.1:5128' } }) === 0, '围栏放行回环 Host')
+  说(mod.本地围栏({ headers: { host: 'localhost:5128' } }) === 0, '围栏放行 localhost')
+  说(mod.本地围栏({ headers: {} }) === 403, '围栏挡住没有 Host 的请求')
+  说(mod.本地围栏({ headers: { host: 'evil.example:5128' } }) === 403, '围栏挡住非本机 Host（DNS 重绑定）')
+  说(
+    mod.本地围栏({ headers: { host: '127.0.0.1:5128', 'sec-fetch-site': 'cross-site' } }) === 403,
+    '围栏挡住 sec-fetch-site: cross-site',
+  )
+  说(mod.本地围栏({ headers: { host: '127.0.0.1:5128', origin: 'http://evil.example' } }) === 403, '围栏挡住跨源 Origin')
+  说(
+    mod.本地围栏({ headers: { host: '127.0.0.1:5128', origin: 'http://127.0.0.1:5128' } }) === 0,
+    '围栏放行同源 Origin',
+  )
+  说(mod.是JSON({ headers: { 'content-type': 'application/json; charset=utf-8' } }), 'isJSON 认 application/json')
+
+  // 走到真实路由处理器上
+  const 本机 = { host: '127.0.0.1:5128' }
+  const r1 = await 打('/state', { headers: { ...本机, 'sec-fetch-site': 'same-origin' } })
+  说(r1.码 === 200, '本机同源 GET /state 放行', String(r1.码))
+  const r2 = await 打('/state', { headers: { host: 'evil.example:5128' } })
+  说(r2.码 === 403, '跨站 Host 的 GET /state 被 403', String(r2.码))
+  const r3 = await 打('/save', {
+    method: 'POST',
+    headers: { ...本机, 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'a=1',
+  })
+  说(r3.码 === 415, '表单式 POST /save 被 415', String(r3.码))
+  const r4 = await 打('/save', {
+    method: 'POST',
+    headers: { host: 'evil.example:5128', 'content-type': 'application/json' },
+    body: '{}',
+  })
+  说(r4.码 === 403, '跨站 POST /save 被 403（写不进配置）', String(r4.码))
+  const r5 = await 打('/save', {
+    method: 'POST',
+    headers: { ...本机, 'content-type': 'application/json' },
+    body: '不是 JSON',
+  })
+  说(r5.码 === 400, '同源 JSON POST /save 放行到解析层', String(r5.码))
+
+  for (const f of 清) {
+    try {
+      f()
+    } catch {
+      /* 清理不该抛 */
+    }
+  }
+  await new Promise((r) => setTimeout(r, 20))
+}
+
 if (问题.length > 0) {
   console.log(`\napply 探针没过：${问题.length} 项`)
   process.exit(1)
