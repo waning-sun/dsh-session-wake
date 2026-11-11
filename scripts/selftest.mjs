@@ -136,6 +136,49 @@ const 等 = (a, b, 名) => ok(名, JSON.stringify(a) === JSON.stringify(b), `拿
   等(r.答复, '干完了，改了三处', '会话任务：把答复带回来了')
 }
 
+// ── 起始配置：面板存的文件不能被插件配置里的空默认盖掉 ──────────────────────
+{
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const 旧home = process.env.DSH_HOME
+  const 临时 = mkdtempSync(join(tmpdir(), 'wake-selftest-'))
+  process.env.DSH_HOME = 临时
+  const 条 = (id) => ({ 会话: id, 开: true, provider: '', model: '', 思考强度: '', 提示词: '' })
+  const 插件配置 = { 开: true, 自动唤醒: [], 启动延迟毫秒: 1500, 唤醒超时秒: 300 }
+  const 文件 = join(临时, 'dsh-session-wake.json')
+
+  ok('起始配置：没有文件时用插件配置', m.起始配置({ 自动唤醒: [条('session-aaa')] }).自动唤醒.length === 1)
+
+  writeFileSync(文件, JSON.stringify({ 自动唤醒: [条('session-1'), 条('session-2')] }), 'utf8')
+  const 合 = m.起始配置(插件配置)
+  ok('起始配置：文件里的条目不被「自动唤醒: []」盖掉', 合.自动唤醒.length === 2, JSON.stringify(合.自动唤醒.map((x) => x.会话)))
+  ok('起始配置：文件没写的键回落到插件配置', 合.启动延迟毫秒 === 1500, String(合.启动延迟毫秒))
+
+  writeFileSync(文件, JSON.stringify({ 自动唤醒: [] }), 'utf8')
+  ok('起始配置：文件里明确清空才算清空', m.起始配置(插件配置).自动唤醒.length === 0)
+
+  // apply 层面：真按文件里的条目排队
+  writeFileSync(文件, JSON.stringify({ 自动唤醒: [条('session-1'), 条('session-2')], 启动延迟毫秒: 60000 }), 'utf8')
+  const 话 = []
+  const 假ctx = {
+    logger: { info: (s) => 话.push(String(s)) },
+    effect: (fn) => {
+      const f = fn()
+      if (typeof f === 'function') f()
+    },
+  }
+  m.apply(假ctx, 插件配置)
+  ok('apply：按文件里的条目排队（不是 0 间）', 话.some((l) => l.includes('已排队：2 间会话')), 话.join(' / '))
+
+  if (旧home === undefined) delete process.env.DSH_HOME
+  else process.env.DSH_HOME = 旧home
+  try {
+    rmSync(临时, { recursive: true, force: true })
+  } catch {
+    /* 临时目录删不掉也无所谓 */
+  }
+}
+
 // ── 状态 ───────────────────────────────────────────────────────────────────
 {
   const s = m.状态({ 自动唤醒: [{ 会话: 'session-aaa', provider: 'p', model: 'mm' }] })

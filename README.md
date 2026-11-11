@@ -48,7 +48,7 @@ dsh plugin add dsh-session-wake
 
 ## 配置文件
 
-`~/.dsh/dsh-session-wake.json`（`$DSH_HOME` 优先）：
+`~/.dsh/dsh-session-wake.json`（`$DSH_HOME` 优先）。**这份文件优先于插件配置**：`cordis.patch.yml` 里的 `config` 只是首次安装的默认值，文件里写了的键一律以文件为准；你重启 DSH 后面板里看到的就是存下来的那一份。
 
 ```json
 {
